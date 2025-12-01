@@ -81,7 +81,7 @@ npm start
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
 | `TELEGRAM_BOT_TOKEN` | Your Telegram bot token from BotFather | Yes | - |
-| `VIDEO_PROVIDER` | Video provider to use (`dummy` or `pika`) | No | `dummy` |
+| `VIDEO_PROVIDER` | Video provider to use (`dummy`, `veo3`, or `pika`) | No | `dummy` |
 | `VIDEO_API_KEY` | API key for video providers | No | - |
 | `PORT` | HTTP server port | No | `3000` |
 
@@ -95,12 +95,20 @@ Set the `VIDEO_PROVIDER` environment variable:
   ```
   This provider simulates video generation and returns a sample video URL.
 
+- **VEO3 Provider** (Recommended - Best Quality) ⭐:
+  ```env
+  VIDEO_PROVIDER=veo3
+  VIDEO_API_KEY=your_veo3_api_key_here
+  ```
+  Get your API key: https://www.veo3gen.co/info/installation (100 free credits!)
+  See [API_PROVIDERS.md](./API_PROVIDERS.md) for detailed setup.
+
 - **Pika Provider** (requires API key):
   ```env
   VIDEO_PROVIDER=pika
   VIDEO_API_KEY=your_pika_api_key_here
   ```
-  Note: The Pika provider is currently a stub with TODOs for actual API integration.
+  See [API_PROVIDERS.md](./API_PROVIDERS.md) for setup instructions.
 
 ## Telegram Commands
 

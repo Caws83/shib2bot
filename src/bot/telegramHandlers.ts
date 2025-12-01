@@ -15,9 +15,11 @@ const DEFAULT_ASPECT_RATIO = '16:9';
  */
 export const handleStart = async (ctx: Context): Promise<void> => {
   try {
-    const welcomeMessage = `🎬 Welcome to the AI Video Generation Bot!
+    const welcomeMessage = `🐕 SHIB2BOT is here! 🚀
 
-Send /video <prompt> to generate an AI video.
+Rebuilding the ShibArmy ecosystem with stealth launch - fair for everyone! 💎
+
+🎬 Generate AI videos with /video command
 
 Example: /video shiba inu flying through a neon city, 10 seconds, 16:9
 
@@ -25,7 +27,7 @@ You can specify:
 • Duration: "5s", "10 seconds", etc. (default: ${DEFAULT_DURATION}s)
 • Aspect ratio: "16:9", "9:16", "1:1" (default: ${DEFAULT_ASPECT_RATIO})
 
-Let's create something amazing! 🚀`;
+Let's create something amazing! 🌟`;
 
     await ctx.reply(welcomeMessage);
     logger.info('Start command handled', { userId: ctx.from?.id });

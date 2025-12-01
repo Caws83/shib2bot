@@ -6,9 +6,10 @@
 import { IVideoProvider } from './IVideoProvider';
 import { DummyVideoProvider } from './DummyVideoProvider';
 import { PikaVideoProvider } from './PikaVideoProvider';
+import { Veo3VideoProvider } from './Veo3VideoProvider';
 import { logger } from '../utils/logger';
 
-export type VideoProviderType = 'dummy' | 'pika';
+export type VideoProviderType = 'dummy' | 'pika' | 'veo3';
 
 /**
  * Creates a video provider instance based on the provider type
@@ -23,6 +24,14 @@ export const createVideoProvider = (providerType: string, apiKey: string = ''): 
     case 'dummy':
       logger.info('Using DummyVideoProvider for testing');
       return new DummyVideoProvider();
+
+    case 'veo3':
+      if (!apiKey) {
+        logger.warn('Veo3VideoProvider requires an API key. Falling back to DummyVideoProvider.');
+        return new DummyVideoProvider();
+      }
+      logger.info('Using Veo3VideoProvider');
+      return new Veo3VideoProvider(apiKey);
 
     case 'pika':
       if (!apiKey) {
