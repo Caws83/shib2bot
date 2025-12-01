@@ -7,9 +7,10 @@ import { IVideoProvider } from './IVideoProvider';
 import { DummyVideoProvider } from './DummyVideoProvider';
 import { PikaVideoProvider } from './PikaVideoProvider';
 import { Veo3VideoProvider } from './Veo3VideoProvider';
+import { FalAiVideoProvider } from './FalAiVideoProvider';
 import { logger } from '../utils/logger';
 
-export type VideoProviderType = 'dummy' | 'pika' | 'veo3';
+export type VideoProviderType = 'dummy' | 'pika' | 'veo3' | 'falai';
 
 /**
  * Creates a video provider instance based on the provider type
@@ -32,6 +33,15 @@ export const createVideoProvider = (providerType: string, apiKey: string = ''): 
       }
       logger.info('Using Veo3VideoProvider');
       return new Veo3VideoProvider(apiKey);
+
+    case 'falai':
+    case 'fal':
+      if (!apiKey) {
+        logger.warn('FalAiVideoProvider requires an API key. Falling back to DummyVideoProvider.');
+        return new DummyVideoProvider();
+      }
+      logger.info('Using FalAiVideoProvider');
+      return new FalAiVideoProvider(apiKey);
 
     case 'pika':
       if (!apiKey) {
