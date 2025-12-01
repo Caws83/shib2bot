@@ -73,9 +73,10 @@ export class FalAiVideoProvider implements IVideoProvider {
 
     try {
       // Fal.ai endpoints for video generation
-      // Based on Fal.ai documentation, try these endpoints
+      // Try different endpoint formats
       const endpoints = [
-        'fal-ai/runway-gen3',
+        'fal-ai/runway-gen3',  // Runway Gen-3 via Fal.ai
+        'fal-ai/runway-gen3-alpha',
         'fal-ai/stable-video-diffusion',
         'fal-ai/stable-video',
       ];
@@ -87,19 +88,25 @@ export class FalAiVideoProvider implements IVideoProvider {
           logger.debug(`FalAiVideoProvider: Trying endpoint ${endpoint}`);
           
           // Fal.ai request format - try different body structures
+          // Based on Fal.ai docs, runway-gen3 might need different format
           const requestBodies = [
-            // Format 1: Standard format
+            // Format 1: Runway Gen-3 format (prompt_text instead of prompt)
+            {
+              prompt_text: prompt,
+              aspect_ratio: this.mapAspectRatio(aspectRatio),
+            },
+            // Format 2: Standard format with prompt
+            {
+              prompt,
+              aspect_ratio: this.mapAspectRatio(aspectRatio),
+            },
+            // Format 3: With duration
             {
               prompt,
               duration: durationSeconds,
               aspect_ratio: this.mapAspectRatio(aspectRatio),
             },
-            // Format 2: Without duration (some models don't support it)
-            {
-              prompt,
-              aspect_ratio: this.mapAspectRatio(aspectRatio),
-            },
-            // Format 3: Just prompt
+            // Format 4: Just prompt
             {
               prompt,
             },
@@ -203,8 +210,31 @@ export class FalAiVideoProvider implements IVideoProvider {
           throw new Error(`Fal.ai API endpoint not found. Tried: ${this.baseUrl}. Please check Fal.ai documentation.`);
         } else if (status === 422) {
           // 422 means invalid request format - log the actual error from Fal.ai
-          const falError = errorData?.detail || errorData?.message || errorMessage;
-          logger.error('Fal.ai API 422 error details', { errorData, status });
+          logger.error('Fal.ai API 422 error details', { 
+            errorData, 
+            status,
+            fullResponse: JSON.stringify(errorData, null, 2)
+          });
+          
+          // Extract detailed error message
+          let falError = errorMessage;
+          if (errorData?.detail) {
+            if (Array.isArray(errorData.detail)) {
+              falError = errorData.detail.map((err: any) => {
+                if (typeof err === 'string') return err;
+                if (err?.msg) return err.msg;
+                if (err?.loc) return `${err.loc.join('.')}: ${err.msg || JSON.stringify(err)}`;
+                return JSON.stringify(err);
+              }).join('; ');
+            } else if (typeof errorData.detail === 'string') {
+              falError = errorData.detail;
+            } else {
+              falError = JSON.stringify(errorData.detail);
+            }
+          } else if (errorData?.message) {
+            falError = errorData.message;
+          }
+          
           throw new Error(`Fal.ai API request format invalid: ${falError}. Please check Fal.ai API documentation for correct format.`);
         } else if (status === 429) {
           throw new Error(`Fal.ai API rate limit exceeded. Please try again later.`);
