@@ -31,6 +31,7 @@ export class FalAiVideoProvider implements IVideoProvider {
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
+    // Fal.ai uses fal.run as base URL
     this.baseUrl = process.env.FAL_AI_API_BASE_URL || 'https://fal.run';
     
     this.apiClient = axios.create({
@@ -71,13 +72,12 @@ export class FalAiVideoProvider implements IVideoProvider {
     });
 
     try {
-      // Fal.ai endpoint for video generation
-      // Try different model endpoints
+      // Fal.ai endpoints for video generation
+      // Based on Fal.ai documentation, try these endpoints
       const endpoints = [
+        'fal-ai/runway-gen3',
         'fal-ai/stable-video-diffusion',
         'fal-ai/stable-video',
-        'fal-ai/video-generation',
-        'fal-ai/runway-gen3',
       ];
 
       let lastError: any = null;
@@ -86,14 +86,54 @@ export class FalAiVideoProvider implements IVideoProvider {
         try {
           logger.debug(`FalAiVideoProvider: Trying endpoint ${endpoint}`);
           
-          const response = await this.apiClient.post<FalAiGenerateResponse>(
-            `/${endpoint}`,
+          // Fal.ai request format - try different body structures
+          const requestBodies = [
+            // Format 1: Standard format
             {
               prompt,
               duration: durationSeconds,
               aspect_ratio: this.mapAspectRatio(aspectRatio),
+            },
+            // Format 2: Without duration (some models don't support it)
+            {
+              prompt,
+              aspect_ratio: this.mapAspectRatio(aspectRatio),
+            },
+            // Format 3: Just prompt
+            {
+              prompt,
+            },
+          ];
+
+          let response: any = null;
+          let lastBodyError: any = null;
+
+          for (const body of requestBodies) {
+            try {
+              logger.debug(`FalAiVideoProvider: Trying body format`, body);
+              response = await this.apiClient.post<FalAiGenerateResponse>(
+                `/${endpoint}`,
+                body
+              );
+
+              if (response.status === 200 || response.status === 201) {
+                logger.info(`FalAiVideoProvider: Successfully used endpoint ${endpoint} with body format`);
+                break; // Success!
+              }
+            } catch (bodyError: any) {
+              lastBodyError = bodyError;
+              // If it's a 422, try next body format
+              if (axios.isAxiosError(bodyError) && bodyError.response?.status === 422) {
+                continue; // Try next body format
+              }
+              // For other errors (401, 403, etc.), throw immediately
+              throw bodyError;
             }
-          );
+          }
+
+          if (!response || (response.status !== 200 && response.status !== 201)) {
+            throw lastBodyError || new Error('All request body formats failed');
+          }
 
           // If we get a successful response, use it
           if (response.status === 200 || response.status === 201) {
@@ -126,12 +166,18 @@ export class FalAiVideoProvider implements IVideoProvider {
           }
         } catch (endpointError: any) {
           lastError = endpointError;
-          // If it's not a 404, throw immediately (auth error, etc.)
-          if (axios.isAxiosError(endpointError) && endpointError.response?.status !== 404) {
+          // If it's 404, try next endpoint
+          // If it's 422, try next endpoint (wrong format)
+          // For other errors (401, 403, etc.), throw immediately
+          if (axios.isAxiosError(endpointError)) {
+            const status = endpointError.response?.status;
+            if (status === 404 || status === 422) {
+              continue; // Try next endpoint
+            }
+            // For auth errors, rate limits, etc., throw immediately
             throw endpointError;
           }
-          // Otherwise, try next endpoint
-          continue;
+          throw endpointError;
         }
       }
 
@@ -155,6 +201,11 @@ export class FalAiVideoProvider implements IVideoProvider {
           throw new Error(`Fal.ai API authentication failed. Please check your API key. Status: ${status}`);
         } else if (status === 404) {
           throw new Error(`Fal.ai API endpoint not found. Tried: ${this.baseUrl}. Please check Fal.ai documentation.`);
+        } else if (status === 422) {
+          // 422 means invalid request format - log the actual error from Fal.ai
+          const falError = errorData?.detail || errorData?.message || errorMessage;
+          logger.error('Fal.ai API 422 error details', { errorData, status });
+          throw new Error(`Fal.ai API request format invalid: ${falError}. Please check Fal.ai API documentation for correct format.`);
         } else if (status === 429) {
           throw new Error(`Fal.ai API rate limit exceeded. Please try again later.`);
         } else {
