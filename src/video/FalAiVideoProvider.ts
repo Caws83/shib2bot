@@ -31,8 +31,9 @@ export class FalAiVideoProvider implements IVideoProvider {
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
-    // Fal.ai uses fal.run as base URL
-    this.baseUrl = process.env.FAL_AI_API_BASE_URL || 'https://fal.run';
+    // Fal.ai API: https://queue.fal.run (queue) or https://fal.run (synchronous)
+    // Using queue.fal.run as recommended by Fal.ai docs
+    this.baseUrl = process.env.FAL_AI_API_BASE_URL || 'https://queue.fal.run';
     
     this.apiClient = axios.create({
       baseURL: this.baseUrl,
@@ -87,71 +88,31 @@ export class FalAiVideoProvider implements IVideoProvider {
         try {
           logger.debug(`FalAiVideoProvider: Trying endpoint ${endpoint}`);
           
-          // Fal.ai API format: uses 'input' object wrapper
-          // Based on Fal.ai documentation: https://docs.fal.ai
-          const requestBodies = [
-            // Format 1: Standard Fal.ai format with input wrapper
-            {
-              input: {
-                prompt,
-                aspect_ratio: this.mapAspectRatio(aspectRatio),
-              },
-            },
-            // Format 2: With duration
-            {
-              input: {
-                prompt,
-                duration: durationSeconds,
-                aspect_ratio: this.mapAspectRatio(aspectRatio),
-              },
-            },
-            // Format 3: Just prompt in input
-            {
-              input: {
-                prompt,
-              },
-            },
-            // Format 4: Direct format (fallback)
-            {
+          // Fal.ai queue API format: POST to /fal-ai/model-name with input object
+          // Based on: https://queue.fal.run (queue system)
+          const requestBody = {
+            input: {
               prompt,
               aspect_ratio: this.mapAspectRatio(aspectRatio),
             },
-          ];
+            // Optional: webhook URL for async processing
+            // webhook_url: process.env.FAL_WEBHOOK_URL,
+          };
 
-          // Fal.ai uses queue.submit format - try REST API endpoint
-          // Endpoint format: /fal-ai/model-name (without leading slash in base URL)
+          // Fal.ai queue API: POST to /fal-ai/model-name
+          // Endpoint format: /fal-ai/model-name
           const endpointPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
           
-          let response: any = null;
-          let lastBodyError: any = null;
+          logger.debug(`FalAiVideoProvider: Submitting to ${endpointPath}`, requestBody);
+          
+          // Fal.ai queue API: POST request
+          const response = await this.apiClient.post<FalAiGenerateResponse>(
+            endpointPath,
+            requestBody
+          );
 
-          for (const body of requestBodies) {
-            try {
-              logger.debug(`FalAiVideoProvider: Trying body format`, body);
-              
-              // Fal.ai REST API: POST to /fal-ai/model-name
-              response = await this.apiClient.post<FalAiGenerateResponse>(
-                endpointPath,
-                body
-              );
-
-              if (response.status === 200 || response.status === 201) {
-                logger.info(`FalAiVideoProvider: Successfully used endpoint ${endpoint} with body format`);
-                break; // Success!
-              }
-            } catch (bodyError: any) {
-              lastBodyError = bodyError;
-              // If it's a 422, try next body format
-              if (axios.isAxiosError(bodyError) && bodyError.response?.status === 422) {
-                continue; // Try next body format
-              }
-              // For other errors (401, 403, etc.), throw immediately
-              throw bodyError;
-            }
-          }
-
-          if (!response || (response.status !== 200 && response.status !== 201)) {
-            throw lastBodyError || new Error('All request body formats failed');
+          if (response.status !== 200 && response.status !== 201) {
+            throw new Error(`Unexpected status code: ${response.status}`);
           }
 
           // If we get a successful response, use it
@@ -168,8 +129,9 @@ export class FalAiVideoProvider implements IVideoProvider {
             }
 
             // Check for direct video URL (synchronous response)
-            if (response.data.video?.url || response.data.video_url) {
-              const videoUrl = response.data.video?.url || response.data.video_url;
+            const responseData = response.data as any;
+            if (responseData.video?.url || responseData.video_url) {
+              const videoUrl = responseData.video?.url || responseData.video_url;
               logger.info('FalAiVideoProvider: Video generated immediately', {
                 videoUrl,
               });
@@ -177,8 +139,8 @@ export class FalAiVideoProvider implements IVideoProvider {
             }
 
             // Check for video in nested structure
-            if ((response.data as any).video) {
-              const videoUrl = (response.data as any).video.url || (response.data as any).video;
+            if (responseData.video) {
+              const videoUrl = responseData.video.url || responseData.video;
               if (videoUrl && (typeof videoUrl === 'string' || videoUrl.url)) {
                 return typeof videoUrl === 'string' ? videoUrl : videoUrl.url;
               }
@@ -280,34 +242,8 @@ export class FalAiVideoProvider implements IVideoProvider {
 
     while (attempts < maxAttempts) {
       try {
-        // Fal.ai status endpoint - try different formats
-        const statusEndpoints = [
-          `/queue/${requestId}`,
-          `/requests/${requestId}`,
-          `/v1/queue/${requestId}`,
-        ];
-
-        let response: any = null;
-        let statusError: any = null;
-
-        for (const statusEndpoint of statusEndpoints) {
-          try {
-            response = await this.apiClient.get<FalAiStatusResponse>(statusEndpoint);
-            if (response.status === 200) {
-              break; // Success
-            }
-          } catch (err: any) {
-            statusError = err;
-            if (axios.isAxiosError(err) && err.response?.status === 404) {
-              continue; // Try next endpoint
-            }
-            throw err; // Other errors, throw immediately
-          }
-        }
-
-        if (!response) {
-          throw statusError || new Error(`Status endpoint not found for ${requestId}`);
-        }
+        // Fal.ai queue status endpoint: GET /queue/{request_id}
+        const response = await this.apiClient.get<FalAiStatusResponse>(`/queue/${requestId}`);
 
         const status = response.data.status?.toUpperCase();
 
