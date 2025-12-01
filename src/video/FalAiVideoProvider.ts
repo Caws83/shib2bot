@@ -59,8 +59,13 @@ export class FalAiVideoProvider implements IVideoProvider {
 
     try {
       // Try different Fal.ai text-to-video models
-      // runway-gen3 requires image_url, so we skip it
+      // If you deployed your own Fal.ai app, use that endpoint first!
+      // Format: "your-username/wan/v2.1/1.3b/text-to-video"
+      const customAppEndpoint = process.env.FAL_CUSTOM_APP_ENDPOINT;
       const models = [
+        // Your custom deployed app (if you have one)
+        ...(customAppEndpoint ? [customAppEndpoint] : []),
+        // Pre-built Fal.ai models
         'fal-ai/animate',              // Text-to-video animation
         'fal-ai/minimax-video',        // Text-to-video
         'fal-ai/stable-video-diffusion', // Text-to-video
@@ -74,19 +79,27 @@ export class FalAiVideoProvider implements IVideoProvider {
           logger.debug(`FalAiVideoProvider: Trying model ${model}`);
 
           // Try different request formats
+          // For custom Fal.ai apps (like Wan), use the format from docs
           const requestFormats = [
-            // Format 1: With aspect ratio
+            // Format 1: Wan2.1 format (if using custom app)
+            {
+              prompt,
+              aspect_ratio: this.mapAspectRatio(aspectRatio),
+              num_inference_steps: 30,
+              guidance_scale: 5.0,
+            },
+            // Format 2: With aspect ratio
             {
               prompt,
               aspect_ratio: this.mapAspectRatio(aspectRatio),
             },
-            // Format 2: With duration
+            // Format 3: With duration
             {
               prompt,
               duration: durationSeconds,
               aspect_ratio: this.mapAspectRatio(aspectRatio),
             },
-            // Format 3: Just prompt
+            // Format 4: Just prompt
             {
               prompt,
             },
