@@ -47,7 +47,8 @@ export const handleVideo = async (ctx: Context, videoProvider: IVideoProvider): 
       return;
     }
 
-    const messageText = ctx.message.text;
+    // TypeScript type narrowing - we know ctx.message.text exists after the check
+    const messageText = 'text' in ctx.message ? ctx.message.text : '';
     
     // Extract command arguments (everything after /video)
     const args = messageText.replace(/^\/video\s*/i, '').trim();
@@ -163,7 +164,8 @@ export const handleText = async (ctx: Context): Promise<void> => {
       return; // Not a text message, ignore
     }
 
-    const messageText = ctx.message.text;
+    // TypeScript type narrowing - we know ctx.message.text exists after the check
+    const messageText = 'text' in ctx.message ? ctx.message.text : '';
     
     // If message starts with /, it's likely a command we don't handle
     if (messageText.startsWith('/')) {
