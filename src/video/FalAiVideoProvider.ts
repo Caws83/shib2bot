@@ -73,12 +73,13 @@ export class FalAiVideoProvider implements IVideoProvider {
 
     try {
       // Fal.ai endpoints for video generation
-      // Try different endpoint formats
+      // runway-gen3 requires image_url (image-to-video), so skip it for text prompts
+      // Try text-to-video models that work with just prompts
       const endpoints = [
-        'fal-ai/runway-gen3',  // Runway Gen-3 via Fal.ai
-        'fal-ai/runway-gen3-alpha',
-        'fal-ai/stable-video-diffusion',
-        'fal-ai/stable-video',
+        'fal-ai/animate',                  // Animation model (text-to-video)
+        'fal-ai/stable-video-diffusion',   // Might work with text
+        'fal-ai/stable-video',             // Might work with text
+        // Skip runway-gen3 - it requires image_url
       ];
 
       let lastError: any = null;
@@ -88,27 +89,27 @@ export class FalAiVideoProvider implements IVideoProvider {
           logger.debug(`FalAiVideoProvider: Trying endpoint ${endpoint}`);
           
           // Fal.ai request format - try different body structures
-          // Based on Fal.ai docs, runway-gen3 might need different format
+          // Note: runway-gen3 requires image_url, so we try text-only formats first
           const requestBodies = [
-            // Format 1: Runway Gen-3 format (prompt_text instead of prompt)
-            {
-              prompt_text: prompt,
-              aspect_ratio: this.mapAspectRatio(aspectRatio),
-            },
-            // Format 2: Standard format with prompt
+            // Format 1: Text-to-video with prompt and aspect ratio
             {
               prompt,
               aspect_ratio: this.mapAspectRatio(aspectRatio),
             },
-            // Format 3: With duration
+            // Format 2: With duration (if supported)
             {
               prompt,
               duration: durationSeconds,
               aspect_ratio: this.mapAspectRatio(aspectRatio),
             },
-            // Format 4: Just prompt
+            // Format 3: Just prompt (minimal)
             {
               prompt,
+            },
+            // Format 4: prompt_text format (some models use this)
+            {
+              prompt_text: prompt,
+              aspect_ratio: this.mapAspectRatio(aspectRatio),
             },
           ];
 
