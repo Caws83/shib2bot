@@ -87,46 +87,51 @@ export class FalAiVideoProvider implements IVideoProvider {
         try {
           logger.debug(`FalAiVideoProvider: Trying endpoint ${endpoint}`);
           
-          // Fal.ai request format - try different body structures
-          // Try text-to-video formats first (no image_url needed)
+          // Fal.ai API format: uses 'input' object wrapper
+          // Based on Fal.ai documentation: https://docs.fal.ai
           const requestBodies = [
-            // Format 1: Standard text-to-video format
-            {
-              prompt,
-              aspect_ratio: this.mapAspectRatio(aspectRatio),
-            },
-            // Format 2: With duration
-            {
-              prompt,
-              duration: durationSeconds,
-              aspect_ratio: this.mapAspectRatio(aspectRatio),
-            },
-            // Format 3: prompt_text format (some models use this)
-            {
-              prompt_text: prompt,
-              aspect_ratio: this.mapAspectRatio(aspectRatio),
-            },
-            // Format 4: input format (some Fal.ai models use this)
+            // Format 1: Standard Fal.ai format with input wrapper
             {
               input: {
                 prompt,
                 aspect_ratio: this.mapAspectRatio(aspectRatio),
               },
             },
-            // Format 5: Just prompt (minimal)
+            // Format 2: With duration
+            {
+              input: {
+                prompt,
+                duration: durationSeconds,
+                aspect_ratio: this.mapAspectRatio(aspectRatio),
+              },
+            },
+            // Format 3: Just prompt in input
+            {
+              input: {
+                prompt,
+              },
+            },
+            // Format 4: Direct format (fallback)
             {
               prompt,
+              aspect_ratio: this.mapAspectRatio(aspectRatio),
             },
           ];
 
+          // Fal.ai uses queue.submit format - try REST API endpoint
+          // Endpoint format: /fal-ai/model-name (without leading slash in base URL)
+          const endpointPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+          
           let response: any = null;
           let lastBodyError: any = null;
 
           for (const body of requestBodies) {
             try {
               logger.debug(`FalAiVideoProvider: Trying body format`, body);
+              
+              // Fal.ai REST API: POST to /fal-ai/model-name
               response = await this.apiClient.post<FalAiGenerateResponse>(
-                `/${endpoint}`,
+                endpointPath,
                 body
               );
 
@@ -153,26 +158,37 @@ export class FalAiVideoProvider implements IVideoProvider {
           if (response.status === 200 || response.status === 201) {
             logger.info(`FalAiVideoProvider: Successfully used endpoint ${endpoint}`);
             
-            // Fal.ai might return video_url directly or request_id
-            if (response.data.video_url) {
-              logger.info('FalAiVideoProvider: Video generated immediately', {
-                videoUrl: response.data.video_url,
-              });
-              return response.data.video_url;
-            }
-
+            // Fal.ai response format: may return request_id for queue, or direct result
+            // Check for request_id (queue system)
             if (response.data.request_id) {
-              logger.info('FalAiVideoProvider: Job submitted successfully', {
+              logger.info('FalAiVideoProvider: Job submitted to queue', {
                 requestId: response.data.request_id,
               });
               return response.data.request_id;
+            }
+
+            // Check for direct video URL (synchronous response)
+            if (response.data.video?.url || response.data.video_url) {
+              const videoUrl = response.data.video?.url || response.data.video_url;
+              logger.info('FalAiVideoProvider: Video generated immediately', {
+                videoUrl,
+              });
+              return videoUrl;
+            }
+
+            // Check for video in nested structure
+            if ((response.data as any).video) {
+              const videoUrl = (response.data as any).video.url || (response.data as any).video;
+              if (videoUrl && (typeof videoUrl === 'string' || videoUrl.url)) {
+                return typeof videoUrl === 'string' ? videoUrl : videoUrl.url;
+              }
             }
 
             if (response.data.error) {
               throw new Error(`Fal.ai API error: ${response.data.error}`);
             }
 
-            // Try to extract request_id from response
+            // Try to extract request_id from response (fallback)
             const requestId = (response.data as any).id || (response.data as any).job_id;
             if (requestId) {
               return requestId;
@@ -264,8 +280,34 @@ export class FalAiVideoProvider implements IVideoProvider {
 
     while (attempts < maxAttempts) {
       try {
-        // Fal.ai status endpoint
-        const response = await this.apiClient.get<FalAiStatusResponse>(`/requests/${requestId}`);
+        // Fal.ai status endpoint - try different formats
+        const statusEndpoints = [
+          `/queue/${requestId}`,
+          `/requests/${requestId}`,
+          `/v1/queue/${requestId}`,
+        ];
+
+        let response: any = null;
+        let statusError: any = null;
+
+        for (const statusEndpoint of statusEndpoints) {
+          try {
+            response = await this.apiClient.get<FalAiStatusResponse>(statusEndpoint);
+            if (response.status === 200) {
+              break; // Success
+            }
+          } catch (err: any) {
+            statusError = err;
+            if (axios.isAxiosError(err) && err.response?.status === 404) {
+              continue; // Try next endpoint
+            }
+            throw err; // Other errors, throw immediately
+          }
+        }
+
+        if (!response) {
+          throw statusError || new Error(`Status endpoint not found for ${requestId}`);
+        }
 
         const status = response.data.status?.toUpperCase();
 
