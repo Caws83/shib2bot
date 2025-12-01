@@ -42,7 +42,12 @@ Let's create something amazing! 🌟`;
  */
 export const handleVideo = async (ctx: Context, videoProvider: IVideoProvider): Promise<void> => {
   try {
-    const messageText = 'text' in ctx.message ? ctx.message.text : '';
+    if (!ctx.message || !('text' in ctx.message)) {
+      await ctx.reply('Please send a text message with the /video command.');
+      return;
+    }
+
+    const messageText = ctx.message.text;
     
     // Extract command arguments (everything after /video)
     const args = messageText.replace(/^\/video\s*/i, '').trim();
@@ -119,7 +124,9 @@ Parameters:
       // Send video to user
       await ctx.telegram.sendVideo(ctx.chat!.id, videoUrl, {
         caption,
-        reply_to_message_id: statusMessage.message_id,
+        reply_parameters: {
+          message_id: statusMessage.message_id,
+        },
       });
 
       // Delete the status message
@@ -152,7 +159,11 @@ Parameters:
  */
 export const handleText = async (ctx: Context): Promise<void> => {
   try {
-    const messageText = 'text' in ctx.message ? ctx.message.text : '';
+    if (!ctx.message || !('text' in ctx.message)) {
+      return; // Not a text message, ignore
+    }
+
+    const messageText = ctx.message.text;
     
     // If message starts with /, it's likely a command we don't handle
     if (messageText.startsWith('/')) {
