@@ -29,12 +29,14 @@ export class Veo3VideoProvider implements IVideoProvider {
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
+    // VEO3 API base URL - try different possible endpoints
     this.baseUrl = process.env.VEO3_API_BASE_URL || 'https://api.veo3gen.co';
     
     this.apiClient = axios.create({
       baseURL: this.baseUrl,
       headers: {
         'X-API-Key': this.apiKey,
+        'Authorization': `Bearer ${this.apiKey}`, // Try both header formats
         'Content-Type': 'application/json',
       },
       timeout: 60000, // 60 seconds timeout for initial request
@@ -70,34 +72,66 @@ export class Veo3VideoProvider implements IVideoProvider {
 
     try {
       // VEO3 API endpoint for video generation
-      // Documentation: https://www.veo3gen.co/info/endpoints
-      const response = await this.apiClient.post<Veo3GenerateResponse>('/v1/generate', {
-        prompt,
-        duration: durationSeconds,
-        aspect_ratio: this.mapAspectRatio(aspectRatio),
-        model: 'veo-3.0-generate', // VEO3 model name
-      });
+      // Try multiple possible endpoint formats
+      const endpoints = [
+        '/api/v1/generate',
+        '/v1/generate',
+        '/api/generate',
+        '/generate',
+        '/api/veo/generate',
+      ];
 
-      if (response.data.job_id) {
-        logger.info('Veo3VideoProvider: Job submitted successfully', {
-          jobId: response.data.job_id,
-        });
-        return response.data.job_id;
+      let lastError: any = null;
+      
+      for (const endpoint of endpoints) {
+        try {
+          logger.debug(`Veo3VideoProvider: Trying endpoint ${endpoint}`);
+          
+          const response = await this.apiClient.post<Veo3GenerateResponse>(endpoint, {
+            prompt,
+            duration: durationSeconds,
+            aspect_ratio: this.mapAspectRatio(aspectRatio),
+            model: 'veo-3.0-generate', // VEO3 model name
+          });
+
+          // If we get a successful response, use it
+          if (response.status === 200 || response.status === 201) {
+            logger.info(`Veo3VideoProvider: Successfully used endpoint ${endpoint}`);
+            
+            if (response.data.job_id) {
+              logger.info('Veo3VideoProvider: Job submitted successfully', {
+                jobId: response.data.job_id,
+              });
+              return response.data.job_id;
+            }
+
+            // If video_url is returned directly (synchronous response)
+            if (response.data.video_url) {
+              logger.info('Veo3VideoProvider: Video generated immediately', {
+                videoUrl: response.data.video_url,
+              });
+              return response.data.video_url;
+            }
+
+            if (response.data.error) {
+              throw new Error(`VEO3 API error: ${response.data.error}`);
+            }
+
+            throw new Error('Invalid response from VEO3 API: missing job_id or video_url');
+          }
+        } catch (endpointError: any) {
+          lastError = endpointError;
+          // If it's not a 404, throw immediately (auth error, etc.)
+          if (axios.isAxiosError(endpointError) && endpointError.response?.status !== 404) {
+            throw endpointError;
+          }
+          // Otherwise, try next endpoint
+          continue;
+        }
       }
 
-      // If video_url is returned directly (synchronous response)
-      if (response.data.video_url) {
-        logger.info('Veo3VideoProvider: Video generated immediately', {
-          videoUrl: response.data.video_url,
-        });
-        return response.data.video_url;
-      }
-
-      if (response.data.error) {
-        throw new Error(`VEO3 API error: ${response.data.error}`);
-      }
-
-      throw new Error('Invalid response from VEO3 API: missing job_id or video_url');
+      // If all endpoints failed, throw the last error
+      throw lastError || new Error('All VEO3 API endpoints failed');
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const errorMessage = error.response?.data?.error || error.message;
