@@ -29,14 +29,14 @@ export class Veo3VideoProvider implements IVideoProvider {
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
-    // VEO3 API base URL - try different possible endpoints
-    this.baseUrl = process.env.VEO3_API_BASE_URL || 'https://api.veo3gen.co';
+    // VEO3 API base URL - based on SDK documentation
+    this.baseUrl = process.env.VEO3_API_BASE_URL || 'https://api.veo3gen.co/v1';
     
     this.apiClient = axios.create({
       baseURL: this.baseUrl,
       headers: {
-        'X-API-Key': this.apiKey,
-        'Authorization': `Bearer ${this.apiKey}`, // Try both header formats
+        'Authorization': `Bearer ${this.apiKey}`,
+        'X-API-Key': this.apiKey, // Try both formats
         'Content-Type': 'application/json',
       },
       timeout: 60000, // 60 seconds timeout for initial request
@@ -72,13 +72,12 @@ export class Veo3VideoProvider implements IVideoProvider {
 
     try {
       // VEO3 API endpoint for video generation
-      // Try multiple possible endpoint formats
+      // Based on SDK: baseURL is already /v1, so endpoint is just /generate
       const endpoints = [
-        '/api/v1/generate',
-        '/v1/generate',
+        '/generate',  // Most likely based on SDK structure
+        '/videos/generate',
         '/api/generate',
-        '/generate',
-        '/api/veo/generate',
+        '/veo/generate',
       ];
 
       let lastError: any = null;
@@ -87,12 +86,15 @@ export class Veo3VideoProvider implements IVideoProvider {
         try {
           logger.debug(`Veo3VideoProvider: Trying endpoint ${endpoint}`);
           
-          const response = await this.apiClient.post<Veo3GenerateResponse>(endpoint, {
+          // Try different request body formats based on VEO3 SDK structure
+          const requestBody = {
             prompt,
+            model: 'veo-3.0-generate-preview', // Try preview model first
             duration: durationSeconds,
             aspect_ratio: this.mapAspectRatio(aspectRatio),
-            model: 'veo-3.0-generate', // VEO3 model name
-          });
+          };
+          
+          const response = await this.apiClient.post<Veo3GenerateResponse>(endpoint, requestBody);
 
           // If we get a successful response, use it
           if (response.status === 200 || response.status === 201) {
