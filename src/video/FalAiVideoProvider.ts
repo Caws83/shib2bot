@@ -159,6 +159,11 @@ export class FalAiVideoProvider implements IVideoProvider {
     } catch (error) {
       logger.error('FalAiVideoProvider: Video generation failed', error);
       
+      // If balance exhausted or forbidden, provide helpful error
+      if (error.status === 403 || (error.body && error.body.detail && error.body.detail.includes('balance'))) {
+        throw new Error('Fal.ai account has no credits. Please add credits at fal.ai/dashboard/billing or switch to VIDEO_PROVIDER=dummy for free testing.');
+      }
+      
       // Provide helpful error messages
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorObj = error as any;

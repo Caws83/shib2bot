@@ -25,8 +25,8 @@ export class DummyVideoProvider implements IVideoProvider {
     await new Promise((resolve) => setTimeout(resolve, delay));
 
     // Return a placeholder video URL
-    // Using a reliable sample video service
-    const videoUrl = 'https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4';
+    // Using a reliable sample video service (same as Python demo provider)
+    const videoUrl = 'https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_1mb.mp4';
 
     logger.info('DummyVideoProvider: Video generation complete', { videoUrl });
 

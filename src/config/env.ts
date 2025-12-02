@@ -21,9 +21,29 @@ export interface EnvConfig {
  */
 export const loadEnvConfig = (): EnvConfig => {
   const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
-  const videoProvider = process.env.VIDEO_PROVIDER || 'dummy';
+  
+  // Default to dummy provider (free, no API keys needed)
+  // Railway: Set VIDEO_PROVIDER=dummy in Railway environment variables
+  // This ensures the bot works even without paid API keys
+  let videoProvider = (process.env.VIDEO_PROVIDER || 'dummy').toLowerCase().trim();
+  
+  // If VIDEO_PROVIDER is not set or empty, use dummy
+  if (!videoProvider || videoProvider === '') {
+    videoProvider = 'dummy';
+    logger.info('No VIDEO_PROVIDER set, defaulting to dummy (free)');
+  }
+  
   const videoApiKey = process.env.VIDEO_API_KEY || '';
   const port = parseInt(process.env.PORT || '3000', 10);
+  
+  // Log what provider we're using for debugging
+  logger.info('Loading environment config', {
+    videoProvider,
+    hasApiKey: !!videoApiKey,
+    port,
+    forceDummy,
+    nodeEnv: process.env.NODE_ENV,
+  });
 
   if (!telegramBotToken) {
     throw new Error('TELEGRAM_BOT_TOKEN is required in environment variables');
@@ -49,9 +69,17 @@ export const loadEnvConfig = (): EnvConfig => {
     port,
   };
 
-  logger.info('Environment configuration loaded', {
+  // Force dummy if it's not a recognized provider (safety check)
+  const validProviders = ['dummy', 'demo', 'falai', 'fal', 'veo3', 'pika', 'custom'];
+  if (!validProviders.includes(config.videoProvider)) {
+    logger.warn(`Invalid provider "${config.videoProvider}", forcing to "dummy"`);
+    config.videoProvider = 'dummy';
+  }
+
+  logger.info('✓ Environment configuration loaded', {
     videoProvider: config.videoProvider,
     port: config.port,
+    willUseDummy: config.videoProvider === 'dummy' || config.videoProvider === 'demo',
   });
 
   return config;

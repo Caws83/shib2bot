@@ -20,11 +20,31 @@ export type VideoProviderType = 'dummy' | 'pika' | 'veo3' | 'falai' | 'custom';
  * @returns An instance of the requested video provider
  */
 export const createVideoProvider = (providerType: string, apiKey: string = ''): IVideoProvider => {
-  const normalizedType = providerType.toLowerCase();
+  const normalizedType = (providerType || '').toLowerCase().trim();
+  
+  // FORCE DUMMY if not in production (local development)
+  const isProduction = process.env.NODE_ENV === 'production';
+  const shouldForceDummy = !isProduction || process.env.FORCE_DUMMY === 'true';
+  
+  // Log what we received for debugging
+  logger.info('createVideoProvider called', {
+    providerType,
+    normalizedType,
+    hasApiKey: !!apiKey,
+    isProduction,
+    shouldForceDummy,
+  });
+
+  // FORCE dummy in development mode
+  if (shouldForceDummy && normalizedType !== 'dummy' && normalizedType !== 'demo') {
+    logger.warn(`⚠ FORCING DummyVideoProvider (was: ${normalizedType}). This is development mode.`);
+    return new DummyVideoProvider();
+  }
 
   switch (normalizedType) {
     case 'dummy':
-      logger.info('Using DummyVideoProvider for testing');
+    case 'demo':  // Accept 'demo' as alias for 'dummy'
+      logger.info('✓ Using DummyVideoProvider for testing (demo mode) - NO API KEYS NEEDED');
       return new DummyVideoProvider();
 
     case 'veo3':
@@ -42,7 +62,26 @@ export const createVideoProvider = (providerType: string, apiKey: string = ''): 
         return new DummyVideoProvider();
       }
       logger.info('Using FalAiVideoProvider');
-      return new FalAiVideoProvider(apiKey);
+      // Create a wrapper that falls back to dummy on balance/credit errors
+      const falProvider = new FalAiVideoProvider(apiKey);
+      const dummyProvider = new DummyVideoProvider();
+      
+      return new class implements IVideoProvider {
+        async generateVideo(options: GenerateVideoOptions): Promise<string> {
+          try {
+            return await falProvider.generateVideo(options);
+          } catch (error: any) {
+            // If Fal.ai fails (no credits, balance exhausted, etc), fallback to dummy
+            const errorMsg = error?.message || '';
+            const errorBody = error?.body?.detail || '';
+            if (error?.status === 403 || errorMsg.includes('balance') || errorMsg.includes('credits') || errorBody.includes('balance') || errorBody.includes('Exhausted')) {
+              logger.warn('Fal.ai failed (no credits/balance), automatically falling back to DummyVideoProvider');
+              return await dummyProvider.generateVideo(options);
+            }
+            throw error;
+          }
+        }
+      }();
 
     case 'custom':
       const customApiUrl = process.env.CUSTOM_API_URL || apiKey; // Use apiKey as URL if CUSTOM_API_URL not set
