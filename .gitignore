@@ -1,9 +1,12 @@
 # Dependencies
 node_modules/
+admin-panel/node_modules/
 
 # Build output
 dist/
 *.tsbuildinfo
+admin-panel/.next/
+admin-panel/out/
 
 # Environment variables
 .env
@@ -32,3 +35,12 @@ Thumbs.db
 coverage/
 .nyc_output/
 
+# Prisma
+prisma/migrations/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python

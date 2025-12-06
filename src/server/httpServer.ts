@@ -3,7 +3,13 @@
  */
 
 import express, { Express, Request, Response } from 'express';
+import cors from 'cors';
 import { logger } from '../utils/logger';
+import videoRouter from '../api/v1/video';
+import meRouter from '../api/v1/me';
+import paymentsRouter from '../api/v1/payments';
+import telegramWebAppAuthRouter from '../api/auth/telegram-webapp';
+import miniApiRouter from '../api/mini-api';
 
 /**
  * Creates and configures the Express application
@@ -12,6 +18,7 @@ export const createHttpServer = (): Express => {
   const app = express();
 
   // Middleware
+  app.use(cors());
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
@@ -23,20 +30,28 @@ export const createHttpServer = (): Express => {
   // Root endpoint
   app.get('/', (req: Request, res: Response) => {
     res.json({
-      service: 'Veo3 Telegram Bot',
+      service: 'SHIB2BOT',
       status: 'running',
+      version: '2.0.0',
       endpoints: {
         health: '/health',
+        api: '/api/v1',
+        mini: '/mini-api',
+        auth: '/auth',
       },
     });
   });
 
-  // TODO: Add webhook endpoints for:
-  // - Video provider callbacks (when providers support webhooks)
-  // - Twitter/X webhooks (when implementing Twitter integration)
-  // Example:
-  // app.post('/webhooks/video-provider', handleVideoProviderWebhook);
-  // app.post('/webhooks/twitter', handleTwitterWebhook);
+  // API Routes
+  app.use('/api/v1/video', videoRouter);
+  app.use('/api/v1/me', meRouter);
+  app.use('/api/v1/payments', paymentsRouter);
+
+  // Auth routes
+  app.use('/auth', telegramWebAppAuthRouter);
+
+  // Mini API routes (for Telegram Mini App)
+  app.use('/mini-api', miniApiRouter);
 
   // 404 handler
   app.use((req: Request, res: Response) => {

@@ -6,8 +6,7 @@
 import { loadEnvConfig } from './config/env';
 import { logger } from './utils/logger';
 import { startHttpServer } from './server/httpServer';
-import { initializeTelegramBot } from './bot/telegramBot';
-import { createVideoProvider } from './video';
+import { initializeTelegramBot } from './telegram/bot';
 
 /**
  * Main application startup function
@@ -17,19 +16,15 @@ const main = async (): Promise<void> => {
     // Load and validate environment configuration
     const config = loadEnvConfig();
 
-    // Initialize video provider
-    const videoProvider = createVideoProvider(config.videoProvider, config.videoApiKey);
-
     // Start HTTP server
     startHttpServer(config.port);
 
     // Initialize and start Telegram bot
-    initializeTelegramBot(config.telegramBotToken, videoProvider);
+    initializeTelegramBot(config.telegramBotToken);
 
     // Log startup information
-    logger.info('Veo3 Telegram Bot started successfully', {
+    logger.info('SHIB2BOT started successfully', {
       port: config.port,
-      videoProvider: config.videoProvider,
       botTokenSet: !!config.telegramBotToken,
     });
 
